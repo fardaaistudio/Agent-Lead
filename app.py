@@ -39,15 +39,18 @@ st.markdown(
 
 with st.sidebar:
     st.header("Controls")
-    uploaded = st.file_uploader("Upload existing_data.csv", type=["csv"])
+    uploaded = st.file_uploader("Upload existing_data.csv (optional)", type=["csv"])
     location = st.text_input("Location (city, area)")
     categories = st.multiselect("Categories", ["Cafes", "Restaurants", "Ice Cream Shops"], default=["Cafes", "Restaurants", "Ice Cream Shops"])
     max_results = st.slider("Max results per source", 10, 200, 40)
+    desired_count = st.slider("Desired leads to return", 5, 100, 20)
     threshold = st.slider("Duplicate match threshold", 60, 100, 85)
     headless = st.checkbox("Run browsers headless", value=True)
     start = st.button("Start Automatic Search")
     st.markdown("---")
     st.markdown("Tips:\n- Upload your `existing_data.csv` to avoid duplicates.\n- Increase `threshold` for stricter duplicate matching.")
+    demo_btn = st.button("Quick Test (Demo) — generate sample leads")
+from src.demo import demo_leads
 
 
 def run_search(categories: List[str], location: str, headless: bool = True, max_results: int = 40) -> List[dict]:
@@ -89,60 +92,86 @@ def render_lead_card(col, lead: dict):
         st.markdown("</div>", unsafe_allow_html=True)
 
 
-if start:
-    if not uploaded:
-        st.error("Please upload `existing_data.csv` from the sidebar before starting.")
-    else:
-        temp = tempfile.NamedTemporaryFile(delete=False, suffix='.csv')
-        temp.write(uploaded.getvalue())
-        temp.flush()
-        temp.close()
+def _execute_flow(leads, temp_path=None):
+    status = st.empty()
+    progress = st.progress(0)
+    log_box = st.empty()
 
-        status = st.empty()
-        progress = st.progress(0)
-        log_box = st.empty()
+    status.info("Processing leads...")
+    t0 = time.time()
+    try:
+        progress.progress(40)
+        status.info(f"Candidates found — {len(leads)}")
 
-        status.info("Starting scrapers — this can take a few minutes...")
-        t0 = time.time()
-        try:
-            leads = run_search(categories, location, headless=headless, max_results=max_results)
-            progress.progress(40)
-            status.info(f"Scrapers finished — {len(leads)} raw candidates found")
-
-            # Filter against uploaded existing CSV
+        if temp_path:
             status.info("Filtering duplicates against uploaded CSV...")
-            new_df = filter_new_leads(leads, temp.name, threshold=threshold)
-            progress.progress(80)
+            new_df = filter_new_leads(leads, temp_path, threshold=threshold)
+        else:
+            status.info("No existing CSV provided — returning top candidates.")
+            import pandas as _pd
 
+            new_df = _pd.DataFrame(leads)
             if new_df.empty:
-                status.success("No new leads found — all candidates were duplicates.")
-                st.info("Try increasing `max results` or lowering the duplicate threshold.")
+                new_df = _pd.DataFrame(columns=["name", "address", "source", "link"])
             else:
-                status.success(f"{len(new_df)} new leads found")
-                st.markdown("### New Leads")
-                # Cards layout
-                rows = (len(new_df) + 2) // 3
-                for r in range(rows):
-                    cols = st.columns(3)
-                    for i in range(3):
-                        idx = r * 3 + i
-                        if idx >= len(new_df):
-                            break
-                        lead = new_df.iloc[idx].to_dict()
-                        render_lead_card(cols[i], lead)
+                new_df = new_df.drop_duplicates(subset=["name", "address"])[:desired_count]
 
-                st.markdown("---")
-                st.dataframe(new_df)
-                csv = new_df.to_csv(index=False).encode('utf-8')
-                st.download_button("Download CSV", data=csv, file_name='new_leads.csv', mime='text/csv')
+        progress.progress(80)
 
-        except Exception as e:
-            status.error(f"Error during scraping: {e}")
-        finally:
+        if new_df.empty:
+            status.success("No leads available after processing.")
+            st.info("Try increasing `max results` or changing the location/categories.")
+        else:
+            if temp_path is None:
+                new_df = new_df.head(desired_count)
+            status.success(f"{len(new_df)} leads ready")
+            st.markdown("### Leads")
+            rows = (len(new_df) + 2) // 3
+            for r in range(rows):
+                cols = st.columns(3)
+                for i in range(3):
+                    idx = r * 3 + i
+                    if idx >= len(new_df):
+                        break
+                    lead = new_df.iloc[idx].to_dict()
+                    render_lead_card(cols[i], lead)
+
+            st.markdown("---")
+            st.dataframe(new_df)
+            csv = new_df.to_csv(index=False).encode('utf-8')
+            st.download_button("Download CSV", data=csv, file_name='new_leads.csv', mime='text/csv')
+    except Exception as e:
+        status.error(f"Error during processing: {e}")
+    finally:
+        if temp_path:
             try:
-                os.unlink(temp.name)
+                os.unlink(temp_path)
             except Exception:
                 pass
-            progress.progress(100)
-            elapsed = time.time() - t0
-            log_box.info(f"Completed in {elapsed:.1f}s")
+        progress.progress(100)
+        elapsed = time.time() - t0
+        log_box.info(f"Completed in {elapsed:.1f}s")
+
+
+# Demo button acts independently
+if demo_btn:
+    leads = demo_leads(desired_count, location)
+    _execute_flow(leads, temp_path=None)
+
+# Start performs real scraping (may require Playwright deps). Works with or without uploaded CSV.
+if start:
+    temp_path = None
+    if uploaded:
+        tfile = tempfile.NamedTemporaryFile(delete=False, suffix='.csv')
+        tfile.write(uploaded.getvalue())
+        tfile.flush()
+        tfile.close()
+        temp_path = tfile.name
+
+    try:
+        leads = run_search(categories, location, headless=headless, max_results=max_results)
+    except Exception as e:
+        st.error(f"Error running scrapers: {e}")
+        leads = []
+
+    _execute_flow(leads, temp_path=temp_path)
