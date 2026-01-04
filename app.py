@@ -14,27 +14,37 @@ import streamlit as st
 from src.comparator import filter_new_leads
 from src.scraper.google_maps import search_google_maps
 from src.scraper.snappfood import search_snappfood
+from src.scraper.phone_extractor import fetch_phone_from_page
+from concurrent.futures import ThreadPoolExecutor, as_completed
 
 
-st.set_page_config(page_title="Lead Gen Automation", layout="wide")
+st.set_page_config(page_title="Lead Gen Automation", page_icon=":rocket:", layout="wide", initial_sidebar_state="expanded")
 
-st.markdown(
-    """
-    <style>
-    .header {display:flex; align-items:center}
-    .logo {width:56px; height:56px; background:#f7630c; border-radius:8px; display:inline-block; margin-right:12px}
-    .card {padding:12px; border-radius:8px; border:1px solid #eee; background:#fff}
-    </style>
-    <div class="header">
-      <div class="logo"></div>
-      <div>
-        <h1 style="margin:0;">Lead Generation & Automation</h1>
-        <div style="color:gray">Discover new Cafes, Restaurants and Ice Cream Shops</div>
-      </div>
-    </div>
-    """,
-    unsafe_allow_html=True,
-)
+css_path = os.path.join(os.path.dirname(__file__), "static", "style.css")
+try:
+    with open(css_path, "r", encoding="utf-8") as _css:
+        st.markdown(f"<style>{_css.read()}</style>", unsafe_allow_html=True)
+except Exception:
+    # fallback: minimal inline style if file missing
+    st.markdown("<style>body{background:#0f1724;color:#e6eef8}</style>", unsafe_allow_html=True)
+
+# header: show logo image from static files and brand text
+col1, col2 = st.columns([0.08, 0.92])
+with col1:
+    try:
+        st.image(os.path.join("static", "logo.svg"), width=64)
+    except Exception:
+        st.markdown('<div class="logo" aria-hidden="true"></div>', unsafe_allow_html=True)
+with col2:
+    st.markdown(
+        """
+        <div class='brand'>
+          <h1>LeadGen — Modern Minimal</h1>
+          <p>Find and filter top local Cafes, Restaurants and Ice Cream Shops</p>
+        </div>
+        """,
+        unsafe_allow_html=True,
+    )
 
 
 with st.sidebar:
@@ -43,7 +53,7 @@ with st.sidebar:
     location = st.text_input("Location (city, area)")
     categories = st.multiselect("Categories", ["Cafes", "Restaurants", "Ice Cream Shops"], default=["Cafes", "Restaurants", "Ice Cream Shops"])
     max_results = st.slider("Max results per source", 10, 200, 40)
-    desired_count = st.slider("Desired leads to return", 5, 100, 20)
+    desired_count = st.slider("Desired leads to return", 5, 100, 100)
     threshold = st.slider("Duplicate match threshold", 60, 100, 85)
     headless = st.checkbox("Run browsers headless", value=True)
     start = st.button("Start Automatic Search")
@@ -78,18 +88,50 @@ def run_search(categories: List[str], location: str, headless: bool = True, max_
             continue
         seen.add(key)
         aggregated.append(r)
+
+    # attempt to fetch phone numbers for candidates that have links — parallel
+    to_fetch = []
+    for idx, r in enumerate(aggregated):
+        if r.get('phone'):
+            continue
+        link = r.get('link')
+        if not link:
+            r['phone'] = ''
+            continue
+        to_fetch.append((idx, link))
+
+    if to_fetch:
+        max_workers = min(8, len(to_fetch))
+        with ThreadPoolExecutor(max_workers=max_workers) as ex:
+            futures = {ex.submit(fetch_phone_from_page, link, headless): idx for (idx, link) in to_fetch}
+            for fut in as_completed(futures):
+                idx = futures[fut]
+                try:
+                    phone = fut.result()
+                    aggregated[idx]['phone'] = phone or ''
+                except Exception:
+                    aggregated[idx]['phone'] = ''
     return aggregated
 
 
 def render_lead_card(col, lead: dict):
     with col:
-        st.markdown("<div class='card'>", unsafe_allow_html=True)
-        st.markdown(f"**{lead.get('name','-')}**  ")
-        st.markdown(f"_{lead.get('address','').strip()}_")
-        st.markdown(f"Source: **{lead.get('source','')}**")
-        if lead.get('link'):
-            st.markdown(f"[Open link]({lead.get('link')})")
-        st.markdown("</div>", unsafe_allow_html=True)
+                name = lead.get('name', '-')
+                address = lead.get('address', '').strip()
+                source = lead.get('source', '')
+                phone = lead.get('phone', '-')
+                link = lead.get('link')
+                html = f"""
+                <div class='card'>
+                    <div class='lead-title'>{name}</div>
+                    <div class='lead-sub'>{address} · <span style='opacity:0.85'>{source}</span></div>
+                    <div style='display:flex;justify-content:space-between;align-items:center;margin-top:8px'>
+                        <div style='font-weight:600;color:#ffd36a'>{phone or '-'}</div>
+                        {f"<a href='{link}' target='_blank'>Open link →</a>" if link else ""}
+                    </div>
+                </div>
+                """
+                st.markdown(html, unsafe_allow_html=True)
 
 
 def _execute_flow(leads, temp_path=None):
@@ -109,10 +151,9 @@ def _execute_flow(leads, temp_path=None):
         else:
             status.info("No existing CSV provided — returning top candidates.")
             import pandas as _pd
-
             new_df = _pd.DataFrame(leads)
             if new_df.empty:
-                new_df = _pd.DataFrame(columns=["name", "address", "source", "link"])
+                new_df = _pd.DataFrame(columns=["name", "address", "source", "link", "phone"])
             else:
                 new_df = new_df.drop_duplicates(subset=["name", "address"])[:desired_count]
 

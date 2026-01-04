@@ -50,10 +50,13 @@ def demo_leads(count: int = 20, location: str = "") -> List[dict]:
         addr = SAMPLE_ADDRESSES[i % len(SAMPLE_ADDRESSES)]
         if location:
             addr = f"{addr} ({location})"
+        # generate a deterministic-looking demo phone number
+        phone = f"+98 9{random.randint(10,99)} {random.randint(100,999)} {1000 + i}"
         leads.append({
             "name": f"{name} {i+1}",
             "address": addr,
             "source": random.choice(SOURCES),
             "link": f"https://example.com/{name.replace(' ','_')}/{i+1}",
+            "phone": phone,
         })
     return leads

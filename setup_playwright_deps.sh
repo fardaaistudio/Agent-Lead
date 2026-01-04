@@ -16,7 +16,7 @@ sudo apt-get install -y \
   libcairo2 \
   libcairo-gobject2 \
   libgdk-pixbuf2.0-0 \
-  libasound2 \
+  libasound2t64 \
   libpangocairo-1.0-0
 
 echo "Done. You can now run: python -m playwright install"

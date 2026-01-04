@@ -1,0 +1,27 @@
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;600;700&display=swap');
+:root{
+  --bg-1: #0f1724; /* deep navy */
+  --bg-2: #0b1a2b; /* darker */
+  --card: rgba(255,255,255,0.05);
+  --accent: #ff7a59; /* coral */
+  --muted: rgba(255,255,255,0.72);
+}
+html, body, .stApp {
+  background: linear-gradient(180deg, var(--bg-1) 0%, var(--bg-2) 100%) !important;
+  color: #e6eef8 !important;
+  font-family: 'Inter', system-ui, -apple-system, 'Segoe UI', Roboto, 'Helvetica Neue', Arial;
+}
+.header{display:flex;align-items:center;gap:16px;padding:18px 0}
+.logo{width:64px;height:64px;border-radius:12px;background:linear-gradient(135deg,#ff7a59,#ffd36a);box-shadow:0 6px 18px rgba(0,0,0,0.4);display:inline-block}
+.brand{line-height:1}
+.brand h1{margin:0;font-weight:700;letter-spacing:0.2px;font-size:20px}
+.brand p{margin:2px 0 0;color:var(--muted);font-size:13px}
+.card{background:linear-gradient(180deg, rgba(255,255,255,0.03), rgba(255,255,255,0.02));border-radius:12px;padding:14px;border:1px solid rgba(255,255,255,0.04);box-shadow:0 6px 18px rgba(2,6,23,0.6);}
+.lead-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(260px,1fr));gap:16px}
+.lead-title{font-size:15px;font-weight:600;margin-bottom:6px}
+.lead-sub{color:var(--muted);font-size:13px;margin-bottom:8px}
+a, a:link, a:visited {color: #ffd36a}
+.stButton>button{background:linear-gradient(90deg,var(--accent),#ffd36a);border:0;color:#072033;font-weight:700}
+.stDownloadButton>button{background:transparent;border:1px solid rgba(255,255,255,0.08);color:var(--muted)}
+/* make sidebar slightly translucent */
+[data-testid='stSidebar'] .css-1d391kg {background:rgba(255,255,255,0.02)!important}
