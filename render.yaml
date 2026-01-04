@@ -1,0 +1,29 @@
+services:
+  - name: agent-lead-web
+    type: web
+    env: docker
+    branch: main
+    plan: starter
+    dockerfilePath: Dockerfile
+    envVars:
+      - key: PORT
+        value: "8501"
+      - key: PYTHONUNBUFFERED
+        value: "1"
+      - key: AWS_ACCESS_KEY_ID
+        value: ""
+      - key: AWS_SECRET_ACCESS_KEY
+        value: ""
+      - key: S3_BUCKET
+        value: ""
+
+cronJobs:
+  - name: agent-lead-scrape
+    schedule: "0 3 * * *" # daily at 03:00 UTC — adjust as needed
+    command: python run_scrape.py --location "Tehran" --headless --out new_leads.csv
+    env: docker
+    branch: main
+    plan: starter
+    dockerfilePath: Dockerfile
+    envVars: []
+    timeout: 3600
