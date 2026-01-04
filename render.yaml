@@ -17,13 +17,9 @@ services:
       - key: S3_BUCKET
         value: ""
 
-cronJobs:
-  - name: agent-lead-scrape
-    schedule: "0 3 * * *" # daily at 03:00 UTC — adjust as needed
-    command: python run_scrape.py --location "Tehran" --headless --out new_leads.csv
-    env: docker
-    branch: main
-    plan: starter
-    dockerfilePath: Dockerfile
-    envVars: []
-    timeout: 3600
+# Note: Some Render manifest schema versions do not accept a top-level `cronJobs` field.
+# If you want to run scheduled scrapes, create a Scheduled Job via the Render dashboard:
+# Render Dashboard -> New -> Cron Job (Scheduled Job) and use this command:
+#   python run_scrape.py --location "Tehran" --headless --out new_leads.csv
+# Or create the scheduled job manually in the Render UI after importing this service manifest.
+
